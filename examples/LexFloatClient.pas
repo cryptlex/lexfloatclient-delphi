@@ -116,6 +116,16 @@ procedure SetFloatingLicenseCallback(Callback: TLFClosureCallback; Synchronized:
 {$ENDIF}
 
 (*
+    PROCEDURE: ResetFloatingLicenseCallback()
+
+    PURPOSE: Resets the renew license callback function.
+
+    EXCEPTIONS: ELFProductIdException
+*)
+
+procedure ResetFloatingLicenseCallback;
+
+(*
     PROCEDURE: SetFloatingClientMetadata()
 
     PURPOSE: Sets the floating client metadata.
@@ -147,7 +157,7 @@ procedure SetFloatingClientMetadata(const Key, Value: UnicodeString);
     ELFBufferSizeException, ELFMetadataKeyNotFoundException
 *)
 
-function GetHostLicenseMetadata(const Key: UnicodeString);
+function GetHostLicenseMetadata(const Key: UnicodeString): UnicodeString;
 
 (*
     FUNCTION: GetHostLicenseExpiryDate()
@@ -556,13 +566,31 @@ const
   LF_E_SERVER_LICENSE_SUSPENDED = HRESULT(75);
   LF_E_SERVER_LICENSE_GRACE_PERIOD_OVER = HRESULT(76);
 
+function Thin_SetHostProductId(const productId: PWideChar): HRESULT; cdecl;
+  external LexFloatClient_DLL name 'SetHostProductId';
+
 procedure SetHostProductId(const ProductId: UnicodeString);
 begin
 end;
 
+function Thin_SetHostUrl(const hostUrl: PWideChar): HRESULT; cdecl;
+  external LexFloatClient_DLL name 'SetHostUrl';
+
 procedure SetHostUrl(const HostUrl: UnicodeString);
 begin
 end;
+
+type
+  TLFThin_CallbackType = procedure (StatusCode: LongWord); cdecl;
+
+  TLFCallbackKind =
+    (lckNone,
+     lckProcedure,
+     lckMethod
+     {$IFDEF DELPHI_HAS_CLOSURES}, lckClosure{$ENDIF});
+
+function Thin_SetFloatingLicenseCallback(callback: TLFThin_CallbackType): HRESULT; cdecl;
+  external LexFloatClient_DLL name 'SetFloatingLicenseCallback';
 
 procedure SetFloatingLicenseCallback(Callback: TLFProcedureCallback; Synchronized: Boolean); overload;
 begin
@@ -576,48 +604,53 @@ end;
 procedure SetFloatingLicenseCallback(Callback: TLFClosureCallback; Synchronized: Boolean); overload;
 begin
 end;
-
 {$ENDIF}
+
+procedure ResetFloatingLicenseCallback;
+begin
+end;
+
+function Thin_SetFloatingClientMetadata(const key, value: PWideChar): HRESULT; cdecl;
+  external LexFloatClient_DLL name 'SetFloatingClientMetadata';
 
 procedure SetFloatingClientMetadata(const Key, Value: UnicodeString);
 begin
 end;
 
-function GetHostLicenseMetadata(const Key: UnicodeString);
+function Thin_GetHostLicenseMetadata(const key: PWideChar; out value; length: LongWord): HRESULT; cdecl;
+  external LexFloatClient_DLL name 'GetHostLicenseMetadata';
+
+function GetHostLicenseMetadata(const Key: UnicodeString): UnicodeString;
 begin
 end;
+
+function Thin_GetHostLicenseExpiryDate(out expiryDate: LongWord): HRESULT; cdecl;
+  external LexFloatClient_DLL name 'GetHostLicenseExpiryDate';
 
 function GetHostLicenseExpiryDate: TDateTime;
 begin
 end;
 
+function Thin_RequestFloatingLicense: HRESULT; cdecl;
+  external LexFloatClient_DLL name 'RequestFloatingLicense';
+
 procedure RequestFloatingLicense;
 begin
 end;
+
+function Thin_DropFloatingLicense: HRESULT; cdecl;
+  external LexFloatClient_DLL name 'DropFloatingLicense';
 
 procedure DropFloatingLicense;
 begin
 end;
 
+function Thin_HasFloatingLicense: HRESULT; cdecl;
+  external LexFloatClient_DLL name 'HasFloatingLicense';
+
 function HasFloatingLicense: Boolean;
 begin
 end;
-
-
-
-
-
-type
-  TLFThin_CallbackType = procedure (StatusCode: LongWord); cdecl;
-
-  TLFCallbackKind =
-    (lckNone,
-     lckProcedure,
-     lckMethod
-     {$IFDEF DELPHI_HAS_CLOSURES}, lckClosure{$ENDIF});
-
-// TODO
-
 
 class function ELFError.CreateByCode(ErrorCode: HRESULT): ELFError;
 begin
