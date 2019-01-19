@@ -47,199 +47,156 @@ type
 function LFCallbackEventToString(Item: TLFCallbackEvent): string;
 
 type
-  ILFHandle = interface;
-  TLFProcedureCallback = procedure(const Sender: ILFHandle; // Sender can be nil!
-    const Error: Exception; Event: TLFCallbackEvent);
-  TLFMethodCallback = procedure(const Sender: ILFHandle; // Sender can be nil!
-    const Error: Exception; Event: TLFCallbackEvent) of object;
+  TLFProcedureCallback = procedure(const Error: Exception;
+    Event: TLFCallbackEvent);
+  TLFMethodCallback = procedure(const Error: Exception;
+    Event: TLFCallbackEvent) of object;
   {$IFDEF DELPHI_HAS_CLOSURES}
-  TLFClosureCallback = reference to procedure(const Sender: ILFHandle; // can be nil!
-    const Error: Exception; Event: TLFCallbackEvent);
+  TLFClosureCallback = reference to procedure(const Error: Exception;
+    Event: TLFCallbackEvent);
   {$ENDIF}
-  ILFHandle = interface(IInterface) // Delphi-only interface
-  ['{FD2CDD77-EAD1-4D20-9CB4-1A7F466912D7}']
-    function GetHandle: LongWord;
-    function GetOwned: Boolean;
-    procedure SetOwned(AOwned: Boolean);
 
 (*
-    PROCEDURE: SetFloatServer()
+    PROCEDURE: SetHostProductId()
+
+    PURPOSE: Sets the product id of your application.
+
+    PARAMETERS:
+    * ProductId - the unique product id of your application as mentioned
+      on the product page in the dashboard.
+
+    EXCEPTIOND: ELFProductIdException
+*)
+
+procedure SetHostProductId(const ProductId: UnicodeString);
+
+(*
+    PROCEDURE: SetHostUrl()
 
     PURPOSE: Sets the network address of the LexFloatServer.
 
-    PARAMETERS:
-    * HostAddress - hostname or the IP address of the LexFloatServer
-    * Port - port of the LexFloatServer
-
-    EXCEPTIONS: ELFHandleException, ELFProductIdException, ELFFailException
-*)
-
-    procedure SetFloatServer(const HostAddress: UnicodeString; Port: Word);
-
-(*
-    PROCEDURE: SetLicenseCallback()
-
-    PURPOSE: Sets refresh license error callback function.
-
-    Whenever the lease expires, a refresh lease request is sent to the
-    server. If the lease fails to refresh, refresh license callback function
-    gets invoked with the following status error codes: LF_E_LICENSE_EXPIRED,
-    LF_E_LICENSE_EXPIRED_INET, LF_E_SERVER_TIME, LF_E_TIME.
-
-    When there are no more references to ILFHandle, DropLicense is being
-    invoked automatically. DropLicense might be unsuccessful, and this
-    condition is being signaled via Callback too. Callback should not however
-    be able to revive ILFHandle, thus Sender is nil.
+    The url format should be: http://[ip or hostname]:[port]
 
     PARAMETERS:
-    * Callback - name of the callback function
-    * Synchronized - whether callback must be invoked in main (GUI) thread
-    using TThread.Synchronize
-    Usually True for GUI applications and handlers like TForm1.OnLexFloatClient
-    Must be False if there is no GUI message loop, like in console applications,
-    but then another thread synchronization measures must be used.
+    * HostUrl - url string having the correct format
 
-    EXCEPTIONS: ELFHandleException, ELFProductIdException
+    EXCEPTIONS: ELFProductIdException, ELFHostURLException
 *)
 
-    procedure SetLicenseCallback(Callback: TLFProcedureCallback; Synchronized: Boolean); overload;
-    procedure SetLicenseCallback(Callback: TLFMethodCallback; Synchronized: Boolean); overload;
-    {$IFDEF DELPHI_HAS_CLOSURES}
-    procedure SetLicenseCallback(Callback: TLFClosureCallback; Synchronized: Boolean); overload;
-    {$ENDIF}
+procedure SetHostUrl(const HostUrl: UnicodeString);
 
 (*
-    PROCEDURE: ResetLicenseCallback()
+    FUNCTION: SetFloatingLicenseCallback()
 
-    PURPOSE: Resets refresh license error callback function.
+    PURPOSE: Sets the renew license callback function.
 
-    EXCEPTIONS: ELFHandleException, ELFProductIdException
+    Whenever the license lease is about to expire, a renew request is sent to the
+    server. When the request completes, the license callback function
+    gets invoked with one of the following status codes:
+
+    LF_OK, LF_E_INET, LF_E_LICENSE_EXPIRED_INET, LF_E_LICENSE_NOT_FOUND, LF_E_CLIENT, LF_E_IP,
+    LF_E_SERVER, LF_E_TIME, LF_E_SERVER_LICENSE_NOT_ACTIVATED,LF_E_SERVER_TIME_MODIFIED,
+    LF_E_SERVER_LICENSE_SUSPENDED, LF_E_SERVER_LICENSE_EXPIRED, LF_E_SERVER_LICENSE_GRACE_PERIOD_OVER
+
+    PARAMETERS:
+    * callback - name of the callback function
+
+    RETURN CODES: LF_OK, LF_E_PRODUCT_ID
+*/
+LEXFLOATCLIENT_API HRESULT LF_CC SetFloatingLicenseCallback(CallbackType callback);
 *)
 
-    procedure ResetLicenseCallback;
-
 (*
-    PROCEDURE: RequestLicense()
+    PROCEDURE: SetFloatingClientMetadata()
 
-    PURPOSE: Sends the request to lease the license from the LexFloatServer.
+    PURPOSE: Sets the floating client metadata.
 
-    EXCEPTIONS: ELFFailException, ELFHandleException, ELFProductIdException,
-    ELFServerAddressException, ELFCallbackException, ELFLicenseExistsException,
-    ELFInetException, ELFNoFreeLicenseException, ELFTimeException,
-    ELFServerTimeException
+    The  metadata appears along with the license details of the license
+    in LexFloatServer dashboard.
+
+    PARAMETERS:
+    * Key - string of maximum length 256 characters with utf-8 encoding.
+    * Value - string of maximum length 256 characters with utf-8 encoding.
+
+    EXCEPTIONS: ELFProductIdException, ELFMetadataKeyLengthException,
+    ELFMetadataValueLengthException, ELFFloatingClientMetadataLimitException
 *)
 
-    procedure RequestLicense;
+procedure SetFloatingClientMetadata(const Key, Value: UnicodeString);
 
 (*
-    PROCEDURE: DropLicense()
+    FUNCTION: GetHostLicenseMetadata()
 
-    PURPOSE: Sends the request to drop the license from the LexFloatServer.
-
-    Call this function before you exit your application to prevent zombie licenses.
-
-    EXCEPTIONS: ELFFailException, ELFHandleException, ELFProductIdException,
-    ELFServerAddressException, ELFCallbackException, ELFInetException, ELFTimeException,
-    ELFServerTimeException
-*)
-
-    // procedure DropLicense;
-    // called automatically after last reference has been released
-    // exceptions are being handled by Callback (Sender is nil)
-
-(*
-    PROPERTY: HasLicense
-
-    PURPOSE: Checks whether any license has been leased or not. If yes,
-    it retuns True.
-
-    RESULT: True, False
-
-    EXCEPTIONS: ELFHandleException, ELFProductIdException, ELFServerAddressException,
-    ELFCallbackException
-*)
-
-    function GetHasLicense: Boolean;
-
-(*
-    PROPERTY: LicenseMetadata
-
-    PURPOSE: Get the value of the license metadata field associated with the float server key.
+    PURPOSE: Get the value of the license metadata field associated with the LexFloatServer license.
 
     PARAMETERS:
     * Key - key of the metadata field whose value you want to get
 
-    RESULT: Value of the license metadata field associated with the float server key
+    RESULT: Value of the license metadata field associated with the LexFloatServer license
 
-    EXCEPTIONS: ELFFailException, ELFHandleException, ELFProductIdException,
-    ELFServerAddressException, ELFCallbackException, ELFBufferSizeException,
-    ELFMetadataKeyNotFoundException, ELFInetException, ELFTimeException,
-    ELFServerTimeException
+    EXCEPTIONS: ELFProductIdException, ELFNoLicenseException,
+    ELFBufferSizeException, ELFMetadataKeyNotFoundException
 *)
 
-    function GetLicenseMetadata(const Key: UnicodeString): UnicodeString;
-
-    // extract LongWord Handle
-    property Handle: LongWord read GetHandle;
-
-    // enable/disable license autodrop
-    property Owned: Boolean read GetOwned write SetOwned;
-
-    property HasLicense: Boolean read GetHasLicense;
-    property LicenseMetadata[const Key: UnicodeString]: UnicodeString read GetLicenseMetadata;
-  end;
+function GetHostLicenseMetadata(const Key: UnicodeString);
 
 (*
-    FUNCTION: LFGetHandle()
+    FUNCTION: GetHostLicenseExpiryDate()
 
-    PURPOSE: Sets the product id of your application and gets the new handle
-    which will be used for the product id.
+    PURPOSE: Gets the license expiry date timestamp of the LexFloatServer license.
 
-    Dropping the license invalidates the used handle, so make sure you request
-    a new handle after dropping the license.
+    RESULT: License expiry date timestamp of the LexFloatServer license
 
-    PARAMETERS:
-    * ProductId - the unique product id of your application as mentioned
-      on the product page in the dashboard.
-
-    RESULT: the new handle which will be used for the session
-
-    EXCEPTIONS: ELFProductIdException
+    EXCEPTIONS: ELFProductIdException, ELFNoLicenseException
 *)
 
-function LFGetHandle(const ProductId: UnicodeString): ILFHandle;
+funtion GetHostLicenseExpiryDate: TDateTime;
 
 (*
-    FUNCTION: LFFindHandle()
+    PROCEDURE: RequestFloatingLicense()
 
-    PURPOSE: Gets the handle set for the product id.
+    PURPOSE: Sends the request to lease the license from the LexFloatServer.
 
-    Dropping the license invalidates the used handle, so make sure you request
-    a new handle after dropping the license.
-
-    PARAMETERS:
-    * ProductId - the unique product id of your application as mentioned
-      on the product page in the dashboard.
-
-    RESULT: The raw handle value.
-
-    EXCEPTIONS: ELFProductIdException, ELFHandleException
+    EXCEPTIONS: ELFFailException, ELFProductIdException,
+    ELFLicenseExistsException, ELFHostURLException, ELFCallbackException,
+    ELFLicenseLimitReachedException, ELFInetException, ELFTimeException,
+    ELFClientException, ELFIPException, ELFServerException,
+    ELFServerLicenseNotActivatedException, ELFServerTimeModifiedException,
+    ELFServerLicenseSuspendedException,
+    ELFServerLicenseGracePeriodOverException, ELFServerLicenseExpiredException
 *)
 
-function LFFindHandle(const ProductId: UnicodeString): LongWord;
-function CreateLFHandleWrapper(Handle: LongWord; AOwned: Boolean = True): ILFHandle;
+procedure RequestFloatingLicense;
 
 (*
-    PROCEDURE: GlobalCleanUp()
+    PROCEDURE: DropFloatingLicense()
 
-    PURPOSE: Releases the resources acquired for sending network requests.
+    PURPOSE: Sends the request to the LexFloatServer to free the license.
 
-    Call this function before you exit your application.
+    Call this function before you exit your application to prevent zombie licenses.
 
-    NOTE: This function does not drop any leased license on the LexFloatServer.
+    EXCEPTIONS: ELFProductIdException, ELFNoLicenseException,
+    ELFHostURLException, ELFCallbackException, ELFInetException,
+    ELFLicenseNotFoundException, ELFClientException, ELFIPException,
+    ELFServerException, ELFServerLicenseNotActivatedException,
+    ELFServerTimeModifiedException, ELFServerLicenseSuspendedException,
+    ELFServerLicenseGracePeriodOverException, ELFServerLicenseExpiredException
 *)
 
-procedure GlobalCleanUp; // called on finalization of this unit automatically
+procedure DropFloatingLicense;
+
+(*
+    FUNCTION: HasFloatingLicense()
+
+    PURPOSE: Checks whether any license has been leased or not. If yes,
+    it returns True.
+
+    RESULT: Boolean value
+
+    EXCEPTIONS: LF_E_PRODUCT_ID
+*)
+
+function HasFloatingLicense: Boolean;
 
 (*** Exceptions ***)
 
