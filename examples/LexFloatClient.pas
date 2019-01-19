@@ -302,35 +302,12 @@ type
   end;
 
     (*
-        CODE: LF_E_HANDLE
+        CODE: LF_E_HOST_URL
 
-        MESSAGE: Invalid handle.
+        MESSAGE: Missing or invalid server url.
     *)
 
-  ELFHandleException = class(ELFException)
-  public
-    constructor Create;
-  end;
-
-    (*
-        CODE: LF_E_SERVER_ADDRESS
-
-        MESSAGE: Missing or invalid server address.
-    *)
-
-  ELFServerAddressException = class(ELFException)
-  public
-    constructor Create;
-  end;
-
-    (*
-        CODE: LF_E_SERVER_TIME
-
-        MESSAGE: System time on Server Machine has been tampered with. Ensure
-        your date and time settings are correct on the server machine.
-    *)
-
-  ELFServerTimeException = class(ELFException)
+  ELFHostURLException = class(ELFException)
   public
     constructor Create;
   end;
@@ -338,8 +315,7 @@ type
     (*
         CODE: LF_E_TIME
 
-        MESSAGE: The system time has been tampered with. Ensure your date
-        and time settings are correct.
+        MESSAGE: Ensure system date and time settings are correct.
     *)
 
   ELFTimeException = class(ELFException)
@@ -359,12 +335,12 @@ type
   end;
 
     (*
-        CODE: LF_E_NO_FREE_LICENSE
+        CODE: LF_E_NO_LICENSE
 
-        MESSAGE: No free license is available.
+        MESSAGE: License has not been leased yet.
     *)
 
-  ELFNoFreeLicenseException = class(ELFException)
+  ELFNoLicenseException = class(ELFException)
   public
     constructor Create;
   end;
@@ -381,14 +357,13 @@ type
   end;
 
     (*
-        CODE: LF_E_LICENSE_EXPIRED
+        CODE: LF_E_LICENSE_NOT_FOUND
 
-        MESSAGE: License lease has expired. This happens when the
-        request to refresh the license fails due to license been taken
-        up by some other client.
+        MESSAGE: License does not exist on server or has already expired. This
+        happens when the request to refresh the license is delayed.
     *)
 
-  ELFLicenseExpiredException = class(ELFException)
+  ELFLicenseNotFoundException = class(ELFException)
   public
     constructor Create;
   end;
@@ -402,6 +377,17 @@ type
     *)
 
   ELFLicenseExpiredInetException = class(ELFException)
+  public
+    constructor Create;
+  end;
+
+    (*
+        CODE: LF_E_LICENSE_LIMIT_REACHED
+
+        MESSAGE: The server has reached it's allowed limit of floating licenses.
+    *)
+
+  ELFLicenseLimitReachedException = class(ELFException)
   public
     constructor Create;
   end;
@@ -429,12 +415,45 @@ type
   end;
 
     (*
-        CODE: LF_E_SERVER
+        CODE: LF_E_METADATA_KEY_LENGTH
 
-        MESSAGE: Server error.
+        MESSAGE: Metadata key length is more than 256 characters.
     *)
 
-  ELFServerException = class(ELFException)
+  ELFMetadataKeyLengthException = class(ELFException)
+  public
+    constructor Create;
+  end;
+
+    (*
+        CODE: LF_E_METADATA_VALUE_LENGTH
+
+        MESSAGE: Metadata value length is more than 256 characters.
+    *)
+
+  ELFMetadataValueLengthException = class(ELFException)
+  public
+    constructor Create;
+  end;
+
+    (*
+        CODE: LF_E_FLOATING_CLIENT_METADATA_LIMIT
+
+        MESSAGE: The floating client has reached it's metadata fields limit.
+    *)
+
+  ELFFloatingClientMetadataLimitException = class(ELFException)
+  public
+    constructor Create;
+  end;
+
+    (*
+        CODE: LF_E_IP
+
+        MESSAGE: IP address is not allowed.
+    *)
+
+  ELFIPException = class(ELFException)
   public
     constructor Create;
   end;
@@ -446,6 +465,73 @@ type
     *)
 
   ELFClientException = class(ELFException)
+  public
+    constructor Create;
+  end;
+
+    (*
+        CODE: LF_E_SERVER
+
+        MESSAGE: Server error.
+    *)
+
+  ELFServerException = class(ELFException)
+  public
+    constructor Create;
+  end;
+
+    (*
+        CODE: LF_E_SERVER_TIME_MODIFIED
+
+        MESSAGE: System time on server has been tampered with. Ensure
+        your date and time settings are correct on the server machine.
+    *)
+
+  ELFServerTimeModifiedException = class(ELFException)
+  public
+    constructor Create;
+  end;
+
+    (*
+        CODE: LF_E_SERVER_LICENSE_NOT_ACTIVATED
+
+        MESSAGE: The server has not been activated using a license key.
+    *)
+
+  ELFServerLicenseNotActivatedException = class(ELFException)
+  public
+    constructor Create;
+  end;
+
+    (*
+        CODE: LF_E_SERVER_LICENSE_EXPIRED
+
+        MESSAGE: The server license has expired.
+    *)
+
+  ELFServerLicenseExpiredException = class(ELFException)
+  public
+    constructor Create;
+  end;
+
+    (*
+        CODE: LF_E_SERVER_LICENSE_SUSPENDED
+
+        MESSAGE: The server license has been suspended.
+    *)
+
+  ELFServerLicenseSuspendedException = class(ELFException)
+  public
+    constructor Create;
+  end;
+
+    (*
+        CODE: LF_E_SERVER_LICENSE_GRACE_PERIOD_OVER
+
+        MESSAGE: The grace period for server license is over.
+    *)
+
+  ELFServerLicenseGracePeriodOverException = class(ELFException)
   public
     constructor Create;
   end;
@@ -482,19 +568,27 @@ const
   LF_FAIL = HRESULT(1);
   LF_E_PRODUCT_ID = HRESULT(40);
   LF_E_CALLBACK = HRESULT(41);
-  LF_E_HANDLE = HRESULT(42);
-  LF_E_SERVER_ADDRESS = HRESULT(43);
-  LF_E_SERVER_TIME = HRESULT(44);
-  LF_E_TIME = HRESULT(45);
-  LF_E_INET = HRESULT(46);
-  LF_E_NO_FREE_LICENSE = HRESULT(47);
-  LF_E_LICENSE_EXISTS = HRESULT(48);
-  LF_E_LICENSE_EXPIRED = HRESULT(49);
-  LF_E_LICENSE_EXPIRED_INET = HRESULT(50);
-  LF_E_BUFFER_SIZE = HRESULT(51);
-  LF_E_METADATA_KEY_NOT_FOUND = HRESULT(52);
-  LF_E_SERVER = HRESULT(70);
-  LF_E_CLIENT = HRESULT(71);
+  LF_E_HOST_URL = HRESULT(42);
+  LF_E_TIME = HRESULT(43);
+  LF_E_INET = HRESULT(44);
+  LF_E_NO_LICENSE = HRESULT(45);
+  LF_E_LICENSE_EXISTS = HRESULT(46);
+  LF_E_LICENSE_NOT_FOUND = HRESULT(47);
+  LF_E_LICENSE_EXPIRED_INET = HRESULT(48);
+  LF_E_LICENSE_LIMIT_REACHED = HRESULT(49);
+  LF_E_BUFFER_SIZE = HRESULT(50);
+  LF_E_METADATA_KEY_NOT_FOUND = HRESULT(51);
+  LF_E_METADATA_KEY_LENGTH = HRESULT(52);
+  LF_E_METADATA_VALUE_LENGTH = HRESULT(53);
+  LF_E_FLOATING_CLIENT_METADATA_LIMIT = HRESULT(54);
+  LF_E_IP = HRESULT(60);
+  LF_E_CLIENT = HRESULT(70);
+  LF_E_SERVER = HRESULT(71);
+  LF_E_SERVER_TIME_MODIFIED = HRESULT(72);
+  LF_E_SERVER_LICENSE_NOT_ACTIVATED = HRESULT(73);
+  LF_E_SERVER_LICENSE_EXPIRED = HRESULT(74);
+  LF_E_SERVER_LICENSE_SUSPENDED = HRESULT(75);
+  LF_E_SERVER_LICENSE_GRACE_PERIOD_OVER = HRESULT(76);
 
 function Thin_GetHandle(const productId: PWideChar; out handle: LongWord): HRESULT; cdecl;
   external LexFloatClient_DLL name 'GetHandle';
@@ -1072,19 +1166,27 @@ begin
     LF_FAIL: Result := ELFFailException.Create;
     LF_E_PRODUCT_ID: Result := ELFProductIdException.Create;
     LF_E_CALLBACK: Result := ELFCallbackException.Create;
-    LF_E_HANDLE: Result := ELFHandleException.Create;
-    LF_E_SERVER_ADDRESS: Result := ELFServerAddressException.Create;
-    LF_E_SERVER_TIME: Result := ELFServerTimeException.Create;
+    LF_E_HOST_URL: Result := ELFHostURLException.Create;
     LF_E_TIME: Result := ELFTimeException.Create;
     LF_E_INET: Result := ELFInetException.Create;
-    LF_E_NO_FREE_LICENSE: Result := ELFNoFreeLicenseException.Create;
+    LF_E_NO_LICENSE: Result := ELFNoLicenseException.Create;
     LF_E_LICENSE_EXISTS: Result := ELFLicenseExistsException.Create;
-    LF_E_LICENSE_EXPIRED: Result := ELFLicenseExpiredException.Create;
+    LF_E_LICENSE_NOT_FOUND: Result := ELFLicenseNotFoundException.Create;
     LF_E_LICENSE_EXPIRED_INET: Result := ELFLicenseExpiredInetException.Create;
+    LF_E_LICENSE_LIMIT_REACHED: Result := ELFLicenseLimitReachedException.Create;
     LF_E_BUFFER_SIZE: Result := ELFBufferSizeException.Create;
     LF_E_METADATA_KEY_NOT_FOUND: Result := ELFMetadataKeyNotFoundException.Create;
-    LF_E_SERVER: Result := ELFServerException.Create;
+    LF_E_METADATA_KEY_LENGTH: Result := ELFMetadataKeyLengthException.Create;
+    LF_E_METADATA_VALUE_LENGTH: Result := ELFMetadataValueLengthException.Create;
+    LF_E_FLOATING_CLIENT_METADATA_LIMIT: Result := ELFFloatingClientMetadataLimitException.Create;
+    LF_E_IP: Result := ELFIPException.Create;
     LF_E_CLIENT: Result := ELFClientException.Create;
+    LF_E_SERVER: Result := ELFServerException.Create;
+    LF_E_SERVER_TIME_MODIFIED: Result := ELFServerTimeModifiedException.Create;
+    LF_E_SERVER_LICENSE_NOT_ACTIVATED: Result := ELFServerLicenseNotActivatedException.Create;
+    LF_E_SERVER_LICENSE_EXPIRED: Result := ELFServerLicenseExpiredException.Create;
+    LF_E_SERVER_LICENSE_SUSPENDED: Result := ELFServerLicenseSuspendedException.Create;
+    LF_E_SERVER_LICENSE_GRACE_PERIOD_OVER: Result := ELFServerLicenseGracePeriodOverException.Create;
   else
     Result := ELFUnknownErrorCodeException.Create(ErrorCode);
   end;
@@ -1144,29 +1246,15 @@ begin
   FErrorCode := LF_E_CALLBACK;
 end;
 
-constructor ELFHandleException.Create;
+constructor ELFHostURLException.Create;
 begin
-  inherited Create('Invalid handle');
-  FErrorCode := LF_E_HANDLE;
-end;
-
-constructor ELFServerAddressException.Create;
-begin
-  inherited Create('Missing or invalid server address');
-  FErrorCode := LF_E_SERVER_ADDRESS;
-end;
-
-constructor ELFServerTimeException.Create;
-begin
-  inherited Create('System time on Server Machine has been tampered ' +
-    'with. Ensure your date and time settings are correct on the server machine');
-  FErrorCode := LF_E_SERVER_TIME;
+  inherited Create('Missing or invalid server url');
+  FErrorCode := LF_E_HOST_URL;
 end;
 
 constructor ELFTimeException.Create;
 begin
-  inherited Create('The system time has been tampered with. Ensure your date ' +
-    'and time settings are correct');
+  inherited Create('Ensure system date and time settings are correct');
   FErrorCode := LF_E_TIME;
 end;
 
@@ -1176,10 +1264,10 @@ begin
   FErrorCode := LF_E_INET;
 end;
 
-constructor ELFNoFreeLicenseException.Create;
+constructor ELFNoLicenseException.Create;
 begin
-  inherited Create('No free license is available');
-  FErrorCode := LF_E_NO_FREE_LICENSE;
+  inherited Create('License has not been leased yet');
+  FErrorCode := LF_E_NO_LICENSE;
 end;
 
 constructor ELFLicenseExistsException.Create;
@@ -1188,12 +1276,11 @@ begin
   FErrorCode := LF_E_LICENSE_EXISTS;
 end;
 
-constructor ELFLicenseExpiredException.Create;
+constructor ELFLicenseNotFoundException.Create;
 begin
-  inherited Create('License lease has expired. This happens when the ' +
-    'request to refresh the license fails due to license been taken ' +
-    'up by some other client');
-  FErrorCode := LF_E_LICENSE_EXPIRED;
+  inherited Create('License does not exist on server or has already expired. This ' +
+    'happens when the request to refresh the license is delayed');
+  FErrorCode := LF_E_LICENSE_NOT_FOUND;
 end;
 
 constructor ELFLicenseExpiredInetException.Create;
@@ -1202,6 +1289,12 @@ begin
     'happens when the request to refresh the license fails due to ' +
     'network error');
   FErrorCode := LF_E_LICENSE_EXPIRED_INET;
+end;
+
+constructor ELFLicenseLimitReachedException.Create;
+begin
+  inherited Create('The server has reached it''s allowed limit of floating licenses');
+  FErrorCode := LF_E_LICENSE_LIMIT_REACHED;
 end;
 
 constructor ELFBufferSizeException.Create;
@@ -1216,16 +1309,71 @@ begin
   FErrorCode := LF_E_METADATA_KEY_NOT_FOUND;
 end;
 
-constructor ELFServerException.Create;
+constructor ELFMetadataKeyLengthException.Create;
 begin
-  inherited Create('Server error');
-  FErrorCode := LF_E_SERVER;
+  inherited Create('Metadata key length is more than 256 characters');
+  FErrorCode := LF_E_METADATA_KEY_LENGTH;
+end;
+
+constructor ELFMetadataValueLengthException.Create;
+begin
+  inherited Create('Metadata value length is more than 256 characters');
+  FErrorCode := LF_E_METADATA_VALUE_LENGTH;
+end;
+
+constructor ELFFloatingClientMetadataLimitException.Create;
+begin
+  inherited Create('The floating client has reached it''s metadata fields limit');
+  FErrorCode := LF_E_FLOATING_CLIENT_METADATA_LIMIT;
+end;
+
+constructor ELFIPException.Create;
+begin
+  inherited Create('IP address is not allowed');
+  FErrorCode := LF_E_IP;
 end;
 
 constructor ELFClientException.Create;
 begin
   inherited Create('Client error');
   FErrorCode := LF_E_CLIENT;
+end;
+
+constructor ELFServerException.Create;
+begin
+  inherited Create('Server error');
+  FErrorCode := LF_E_SERVER;
+end;
+
+constructor ELFServerTimeModifiedException.Create;
+begin
+  inherited Create('System time on server has been tampered with. Ensure ' +
+    'your date and time settings are correct on the server machine');
+  FErrorCode := LF_E_SERVER_TIME_MODIFIED;
+end;
+
+constructor ELFServerLicenseNotActivatedException.Create;
+begin
+  inherited Create('The server has not been activated using a license key');
+  FErrorCode := LF_E_SERVER_LICENSE_NOT_ACTIVATED;
+end;
+
+constructor ELFServerLicenseExpiredException.Create;
+begin
+  inherited Create('The server license has expired');
+  FErrorCode := LF_E_SERVER_LICENSE_EXPIRED;
+end;
+
+constructor ELFServerLicenseSuspendedException.Create;
+begin
+  inherited Create('The server license has been suspended');
+  FErrorCode := LF_E_SERVER_LICENSE_SUSPENDED;
+end;
+
+constructor ELFServerLicenseGracePeriodOverException.Create;
+begin
+  inherited Create('The grace period for server license is over');
+  FErrorCode := LF_E_SERVER_LICENSE_GRACE_PERIOD_OVER;
 end;
 
 initialization
