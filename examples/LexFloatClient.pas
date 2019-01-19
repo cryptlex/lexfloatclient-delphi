@@ -86,7 +86,7 @@ procedure SetHostProductId(const ProductId: UnicodeString);
 procedure SetHostUrl(const HostUrl: UnicodeString);
 
 (*
-    FUNCTION: SetFloatingLicenseCallback()
+    PROCEDURE: SetFloatingLicenseCallback()
 
     PURPOSE: Sets the renew license callback function.
 
@@ -99,12 +99,21 @@ procedure SetHostUrl(const HostUrl: UnicodeString);
     LF_E_SERVER_LICENSE_SUSPENDED, LF_E_SERVER_LICENSE_EXPIRED, LF_E_SERVER_LICENSE_GRACE_PERIOD_OVER
 
     PARAMETERS:
-    * callback - name of the callback function
+    * Callback - name of the callback procedure, method or closure
+    * Synchronized - whether callback must be invoked in main (GUI) thread
+    using TThread.Synchronize
+    Usually True for GUI applications and handlers like TForm1.OnLexFloatClient
+    Must be False if there is no GUI message loop, like in console applications,
+    but then another thread synchronization measures must be used.
 
-    RETURN CODES: LF_OK, LF_E_PRODUCT_ID
-*/
-LEXFLOATCLIENT_API HRESULT LF_CC SetFloatingLicenseCallback(CallbackType callback);
+    EXCEPTIONS: ELFProductIdException
 *)
+
+procedure SetFloatingLicenseCallback(Callback: TLFProcedureCallback; Synchronized: Boolean); overload;
+procedure SetFloatingLicenseCallback(Callback: TLFMethodCallback; Synchronized: Boolean); overload;
+{$IFDEF DELPHI_HAS_CLOSURES}
+procedure SetFloatingLicenseCallback(Callback: TLFClosureCallback; Synchronized: Boolean); overload;
+{$ENDIF}
 
 (*
     PROCEDURE: SetFloatingClientMetadata()
