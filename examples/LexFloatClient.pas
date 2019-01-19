@@ -159,7 +159,7 @@ function GetHostLicenseMetadata(const Key: UnicodeString);
     EXCEPTIONS: ELFProductIdException, ELFNoLicenseException
 *)
 
-funtion GetHostLicenseExpiryDate: TDateTime;
+function GetHostLicenseExpiryDate: TDateTime;
 
 (*
     PROCEDURE: RequestFloatingLicense()
@@ -556,574 +556,68 @@ const
   LF_E_SERVER_LICENSE_SUSPENDED = HRESULT(75);
   LF_E_SERVER_LICENSE_GRACE_PERIOD_OVER = HRESULT(76);
 
-function Thin_GetHandle(const productId: PWideChar; out handle: LongWord): HRESULT; cdecl;
-  external LexFloatClient_DLL name 'GetHandle';
-
-function LFGetHandle(const ProductId: UnicodeString): ILFHandle;
-var
-  NewHandle: LongWord;
+procedure SetHostProductId(const ProductId: UnicodeString);
 begin
-  if not ELFError.CheckOKFail(Thin_GetHandle(PWideChar(ProductId), NewHandle)) then
-    raise ELFFailException.Create('Failed to set the product id of the application and get the new handle');
-  Result := CreateLFHandleWrapper(NewHandle);
 end;
 
+procedure SetHostUrl(const HostUrl: UnicodeString);
+begin
+end;
+
+procedure SetFloatingLicenseCallback(Callback: TLFProcedureCallback; Synchronized: Boolean); overload;
+begin
+end;
+
+procedure SetFloatingLicenseCallback(Callback: TLFMethodCallback; Synchronized: Boolean); overload;
+begin
+end;
+
+{$IFDEF DELPHI_HAS_CLOSURES}
+procedure SetFloatingLicenseCallback(Callback: TLFClosureCallback; Synchronized: Boolean); overload;
+begin
+end;
+
+{$ENDIF}
+
+procedure SetFloatingClientMetadata(const Key, Value: UnicodeString);
+begin
+end;
+
+function GetHostLicenseMetadata(const Key: UnicodeString);
+begin
+end;
+
+function GetHostLicenseExpiryDate: TDateTime;
+begin
+end;
+
+procedure RequestFloatingLicense;
+begin
+end;
+
+procedure DropFloatingLicense;
+begin
+end;
+
+function HasFloatingLicense: Boolean;
+begin
+end;
+
+
+
+
+
 type
+  TLFThin_CallbackType = procedure (StatusCode: LongWord); cdecl;
+
   TLFCallbackKind =
     (lckNone,
      lckProcedure,
      lckMethod
      {$IFDEF DELPHI_HAS_CLOSURES}, lckClosure{$ENDIF});
 
-  TLFHandleImplementation = class(TInterfacedObject, ILFHandle)
-  protected
-    FHandle: LongWord;
-    FOwned: Boolean;
-    FCallbackSlot: ShortInt;
-    FCallbackKind: TLFCallbackKind { = lckNone};
-    FLFProcedureCallback: TLFProcedureCallback;
-    FLFMethodCallback: TLFMethodCallback;
-    {$IFDEF DELPHI_HAS_CLOSURES}
-    FLFClosureCallback: TLFClosureCallback;
-    {$ENDIF}
-    FLFCallbackSynchronized: Boolean;
-    FLFStatusCode: HRESULT;
-    FLFEvent: TLFCallbackEvent;
-    FLFCallbackMutex: TRTLCriticalSection;
+// TODO
 
-    constructor Create(AHandle: LongWord; AOwned: Boolean = True);
-    function GetHandle: LongWord;
-    function GetOwned: Boolean;
-    procedure SetOwned(AOwned: Boolean);
-
-    procedure SetFloatServer(const HostAddress: UnicodeString; Port: Word);
-    procedure SetLicenseCallback(Callback: TLFProcedureCallback; Synchronized: Boolean); overload;
-    procedure SetLicenseCallback(Callback: TLFMethodCallback; Synchronized: Boolean); overload;
-    {$IFDEF DELPHI_HAS_CLOSURES}
-    procedure SetLicenseCallback(Callback: TLFClosureCallback; Synchronized: Boolean); overload;
-    {$ENDIF}
-    procedure ResetLicenseCallback;
-    procedure DoCallback(ErrorCode: LongWord; Event: TLFCallbackEvent);
-    procedure Invoke;
-    procedure RequestLicense;
-    procedure DropLicense;
-    destructor Destroy; override;
-    function GetHasLicense: Boolean;
-    function GetLicenseMetadata(const Key: UnicodeString): UnicodeString;
-  end;
-
-function CreateLFHandleWrapper(Handle: LongWord; AOwned: Boolean = True): ILFHandle;
-begin
-  Result := TLFHandleImplementation.Create(Handle, AOwned);
-end;
-
-constructor TLFHandleImplementation.Create(AHandle: LongWord; AOwned: Boolean = True);
-begin
-  inherited Create;
-  FCallbackSlot := -1;
-  FHandle := AHandle;
-  FOwned := AOwned;
-  InitializeCriticalSection(FLFCallbackMutex);
-end;
-
-function TLFHandleImplementation.GetHandle: LongWord;
-begin
-  Result := FHandle;
-end;
-
-function TLFHandleImplementation.GetOwned: Boolean;
-begin
-  Result := FOwned;
-end;
-
-procedure TLFHandleImplementation.SetOwned(AOwned: Boolean);
-begin
-  FOwned := AOwned;
-end;
-
-function Thin_SetFloatServer(handle: LongWord; const hostAddress: PWideChar; port: Word): HRESULT; cdecl;
-  external LexFloatClient_DLL name 'SetFloatServer';
-
-procedure TLFHandleImplementation.SetFloatServer(const HostAddress: UnicodeString; Port: Word);
-begin
-  if not ELFError.CheckOKFail(Thin_SetFloatServer(FHandle, PWideChar(HostAddress), Port)) then
-    raise ELFFailException.CreateFmt
-      ('Failed to set the network address of the LexFloatServer to %s',
-       [HostAddress]);
-end;
-
-type
-  Thin_TLFCallback = procedure(ErrorCode: LongWord); cdecl;
-
-function AllocateCallback(Handler: TLFHandleImplementation): Thin_TLFCallback; forward;
-procedure FreeCallback(Slot: ShortInt); forward;
-
-function Thin_SetLicenseCallback(handle: LongWord; callback: Thin_TLFCallback): HRESULT; cdecl;
-  external LexFloatClient_DLL name 'SetLicenseCallback';
-
-procedure TLFHandleImplementation.SetLicenseCallback(Callback: TLFProcedureCallback; Synchronized: Boolean);
-begin
-  EnterCriticalSection(FLFCallbackMutex);
-  try
-    FLFProcedureCallback := Callback;
-    FLFCallbackSynchronized := Synchronized;
-    FCallbackKind := lckProcedure;
-
-    if FCallbackSlot < 0 then
-    begin
-      if not ELFError.CheckOKFail(Thin_SetLicenseCallback(FHandle, AllocateCallback(Self))) then
-        raise ELFFailException.Create('Failed to set refresh license error callback function');
-    end;
-  finally
-    LeaveCriticalSection(FLFCallbackMutex);
-  end;
-end;
-
-procedure TLFHandleImplementation.SetLicenseCallback(Callback: TLFMethodCallback; Synchronized: Boolean);
-begin
-  EnterCriticalSection(FLFCallbackMutex);
-  try
-    FLFMethodCallback := Callback;
-    FLFCallbackSynchronized := Synchronized;
-    FCallbackKind := lckMethod;
-
-    if FCallbackSlot < 0 then
-    begin
-      if not ELFError.CheckOKFail(Thin_SetLicenseCallback(FHandle, AllocateCallback(Self))) then
-        raise ELFFailException.Create('Failed to set refresh license error callback function');
-    end;
-  finally
-    LeaveCriticalSection(FLFCallbackMutex);
-  end;
-end;
-
-{$IFDEF DELPHI_HAS_CLOSURES}
-procedure TLFHandleImplementation.SetLicenseCallback(Callback: TLFClosureCallback; Synchronized: Boolean);
-begin
-  EnterCriticalSection(FLFCallbackMutex);
-  try
-    FLFClosureCallback := Callback;
-    FLFCallbackSynchronized := Synchronized;
-    FCallbackKind := lckClosure;
-
-    if FCallbackSlot < 0 then
-    begin
-      if not ELFError.CheckOKFail(Thin_SetLicenseCallback(FHandle, AllocateCallback(Self))) then
-        raise ELFFailException.Create('Failed to set refresh license error callback function');
-    end;
-  finally
-    LeaveCriticalSection(FLFCallbackMutex);
-  end;
-end;
-{$ENDIF}
-
-procedure Thin_TLFCallback_Dummy(ErrorCode: LongWord); cdecl;
-begin
-  ;
-end;
-
-procedure TLFHandleImplementation.ResetLicenseCallback;
-begin
-  EnterCriticalSection(FLFCallbackMutex);
-  try
-    FCallbackKind := lckNone;
-
-    if FCallbackSlot >= 0 then
-    begin
-      if not ELFError.CheckOKFail(Thin_SetLicenseCallback(FHandle, Thin_TLFCallback_Dummy)) then
-        raise ELFFailException.Create('Failed to reset refresh license error callback function');
-
-      FreeCallback(FCallbackSlot);
-      FCallbackSlot := -1;
-    end;
-  finally
-    LeaveCriticalSection(FLFCallbackMutex);
-  end;
-end;
-
-const
-  LFCallbackAmount = 16;
-
-type
-  TLFCallbackSlot = record
-    IsUsed: Boolean;
-    Handler: TLFHandleImplementation;
-  end;
-
-var
-  CallbackSlots: array[0 .. LFCallbackAmount - 1] of TLFCallbackSlot;
-  CallbackSlotsMutex: TRTLCriticalSection;
-
-procedure Thin_TLFCallback0(ErrorCode: LongWord); cdecl;
-begin
-  try
-    CallbackSlots[0].Handler.DoCallback(ErrorCode, leRefreshLicense);
-  except end;
-end;
-
-procedure Thin_TLFCallback1(ErrorCode: LongWord); cdecl;
-begin
-  try
-    CallbackSlots[1].Handler.DoCallback(ErrorCode, leRefreshLicense);
-  except end;
-end;
-
-procedure Thin_TLFCallback2(ErrorCode: LongWord); cdecl;
-begin
-  try
-    CallbackSlots[2].Handler.DoCallback(ErrorCode, leRefreshLicense);
-  except end;
-end;
-
-procedure Thin_TLFCallback3(ErrorCode: LongWord); cdecl;
-begin
-  try
-    CallbackSlots[3].Handler.DoCallback(ErrorCode, leRefreshLicense);
-  except end;
-end;
-
-procedure Thin_TLFCallback4(ErrorCode: LongWord); cdecl;
-begin
-  try
-    CallbackSlots[4].Handler.DoCallback(ErrorCode, leRefreshLicense);
-  except end;
-end;
-
-procedure Thin_TLFCallback5(ErrorCode: LongWord); cdecl;
-begin
-  try
-    CallbackSlots[5].Handler.DoCallback(ErrorCode, leRefreshLicense);
-  except end;
-end;
-
-procedure Thin_TLFCallback6(ErrorCode: LongWord); cdecl;
-begin
-  try
-    CallbackSlots[6].Handler.DoCallback(ErrorCode, leRefreshLicense);
-  except end;
-end;
-
-procedure Thin_TLFCallback7(ErrorCode: LongWord); cdecl;
-begin
-  try
-    CallbackSlots[7].Handler.DoCallback(ErrorCode, leRefreshLicense);
-  except end;
-end;
-
-procedure Thin_TLFCallback8(ErrorCode: LongWord); cdecl;
-begin
-  try
-    CallbackSlots[8].Handler.DoCallback(ErrorCode, leRefreshLicense);
-  except end;
-end;
-
-procedure Thin_TLFCallback9(ErrorCode: LongWord); cdecl;
-begin
-  try
-    CallbackSlots[9].Handler.DoCallback(ErrorCode, leRefreshLicense);
-  except end;
-end;
-
-procedure Thin_TLFCallback10(ErrorCode: LongWord); cdecl;
-begin
-  try
-    CallbackSlots[10].Handler.DoCallback(ErrorCode, leRefreshLicense);
-  except end;
-end;
-
-procedure Thin_TLFCallback11(ErrorCode: LongWord); cdecl;
-begin
-  try
-    CallbackSlots[11].Handler.DoCallback(ErrorCode, leRefreshLicense);
-  except end;
-end;
-
-procedure Thin_TLFCallback12(ErrorCode: LongWord); cdecl;
-begin
-  try
-    CallbackSlots[12].Handler.DoCallback(ErrorCode, leRefreshLicense);
-  except end;
-end;
-
-procedure Thin_TLFCallback13(ErrorCode: LongWord); cdecl;
-begin
-  try
-    CallbackSlots[13].Handler.DoCallback(ErrorCode, leRefreshLicense);
-  except end;
-end;
-
-procedure Thin_TLFCallback14(ErrorCode: LongWord); cdecl;
-begin
-  try
-    CallbackSlots[14].Handler.DoCallback(ErrorCode, leRefreshLicense);
-  except end;
-end;
-
-procedure Thin_TLFCallback15(ErrorCode: LongWord); cdecl;
-begin
-  try
-    CallbackSlots[15].Handler.DoCallback(ErrorCode, leRefreshLicense);
-  except end;
-end;
-
-const
-  CallbackEntries: array[0 .. LFCallbackAmount - 1] of Thin_TLFCallback =
-  (Thin_TLFCallback0, Thin_TLFCallback1, Thin_TLFCallback2, Thin_TLFCallback3,
-   Thin_TLFCallback4, Thin_TLFCallback5, Thin_TLFCallback6, Thin_TLFCallback7,
-   Thin_TLFCallback8, Thin_TLFCallback9, Thin_TLFCallback10, Thin_TLFCallback11,
-   Thin_TLFCallback12, Thin_TLFCallback13, Thin_TLFCallback14, Thin_TLFCallback15);
-
-function AllocateCallback(Handler: TLFHandleImplementation): Thin_TLFCallback;
-var
-  i: ShortInt;
-begin
-  Result := nil;
-  EnterCriticalSection(CallbackSlotsMutex);
-  try
-    for i := 0 to LFCallbackAmount - 1 do
-    begin
-      if not CallbackSlots[i].IsUsed then
-      begin
-        CallbackSlots[i].IsUsed := True;
-        CallbackSlots[i].Handler := Handler;
-        Handler.FCallbackSlot := i;
-        Result := CallbackEntries[i];
-        Exit;
-      end;
-    end;
-  finally
-    LeaveCriticalSection(CallbackSlotsMutex);
-  end;
-  raise ELFFailException.Create('Failed to allocate new callback');
-end;
-
-procedure FreeCallback(Slot: ShortInt);
-begin
-  EnterCriticalSection(CallbackSlotsMutex);
-  try
-    CallbackSlots[Slot].IsUsed := False;
-    CallbackSlots[Slot].Handler := nil;
-  finally
-    LeaveCriticalSection(CallbackSlotsMutex);
-  end;
-end;
-
-procedure TLFHandleImplementation.DoCallback(ErrorCode: LongWord; Event: TLFCallbackEvent);
-begin
-  try
-    EnterCriticalSection(FLFCallbackMutex);
-    try
-      case FCallbackKind of
-        lckNone: Exit;
-        lckProcedure: if not Assigned(FLFProcedureCallback) then Exit;
-        lckMethod: if not Assigned(FLFMethodCallback) then Exit;
-        {$IFDEF DELPHI_HAS_CLOSURES}
-        lckClosure: if not Assigned(FLFClosureCallback) then Exit;
-        {$ENDIF}
-      else
-        // there should be default logging here like NSLog, but there is none in Delphi
-      end;
-
-      FLFStatusCode := HRESULT(ErrorCode);
-      FLFEvent := Event;
-      if not FLFCallbackSynchronized then
-      begin
-        Invoke;
-        Exit;
-      end;
-    finally
-      LeaveCriticalSection(FLFCallbackMutex);
-    end;
-
-    // Race condition here
-    //
-    // Invoke should proably run exactly the same (captured) handler,
-    // but instead it reenters mutex, and handler can be different at
-    // that moment. For most sane use cases behavior should be sound
-    // anyway.
-
-    TThread.Synchronize(nil, Invoke);
-  except
-    // there should be default logging here like NSLog, but there is none in Delphi
-  end;
-end;
-
-procedure TLFHandleImplementation.Invoke;
-var
-  Sender: ILFHandle;
-  
-  procedure DoInvoke(const Error: Exception);
-  begin
-    case FCallbackKind of
-      lckNone: Exit;
-      lckProcedure:
-        if Assigned(FLFProcedureCallback) then
-          FLFProcedureCallback(Sender, Error, FLFEvent);
-      lckMethod:
-        if Assigned(FLFMethodCallback) then
-          FLFMethodCallback(Sender, Error, FLFEvent);
-      {$IFDEF DELPHI_HAS_CLOSURES}
-      lckClosure:
-        if Assigned(FLFClosureCallback) then
-          FLFClosureCallback(Sender, Error, FLFEvent);
-      {$ENDIF}
-    else
-      // there should be default logging here like NSLog, but there is none in Delphi
-    end;
-  end;
-
-var
-  FailError: Exception;
-
-begin
-  try
-    EnterCriticalSection(FLFCallbackMutex);
-    try
-      case FCallbackKind of
-        lckNone: Exit;
-        lckProcedure: if not Assigned(FLFProcedureCallback) then Exit;
-        lckMethod: if not Assigned(FLFMethodCallback) then Exit;
-        {$IFDEF DELPHI_HAS_CLOSURES}
-        lckClosure: if not Assigned(FLFClosureCallback) then Exit;
-        {$ENDIF}
-      else
-        // there should be default logging here like NSLog, but there is none in Delphi
-      end;
-
-      if FLFEvent <> leDropLicense then
-      begin
-        Sender := Self;
-      end;
-
-      FailError := nil;
-      try
-        FailError := ELFError.CreateByCode(FLFStatusCode);
-        DoInvoke(FailError);
-      finally
-        FreeAndNil(FailError);
-      end;
-    finally
-      // This recursive mutex prevents the following scenario:
-      //
-      // (Main thread)    SetLicenseCallback
-      // (Tangent thread) LAThin_CallbackProxy going to invoke X.OnLexFloatClient
-      // (Main thread)    ResetLicenseCallback
-      // (Main thread)    X.Free
-      //
-      // Main thread is not allowed to proceed to X.Free until callback is finished
-      // On the other hand, if callback removes itself, recursive mutex will allow that
-      LeaveCriticalSection(FLFCallbackMutex);
-    end;
-  except
-    // there should be default logging here like NSLog, but there is none in Delphi
-  end;
-end;
-
-function Thin_RequestLicense(handle: LongWord): HRESULT; cdecl;
-  external LexFloatClient_DLL name 'RequestLicense';
-
-procedure TLFHandleImplementation.RequestLicense;
-begin
-  if not ELFError.CheckOKFail(Thin_RequestLicense(FHandle)) then
-    raise ELFFailException.Create('Failed to send the request to lease the license from the LexFloatServer');
-end;
-
-function Thin_DropLicense(handle: LongWord): HRESULT; cdecl;
-  external LexFloatClient_DLL name 'DropLicense';
-
-procedure TLFHandleImplementation.DropLicense;
-begin
-  if not ELFError.CheckOKFail(Thin_DropLicense(FHandle)) then
-    raise ELFFailException.Create('Failed to send the request to drop the license from the LexFloatServer');
-end;
-
-destructor TLFHandleImplementation.Destroy;
-begin
-  try
-    if FOwned then
-    begin
-      try
-        DropLicense;
-      except
-        on E: ELFError do
-          DoCallback(E.ErrorCode, leDropLicense);
-        on E: Exception do
-          DoCallback(LF_FAIL, leDropLicense);
-      end;
-    end;
-  except end;
-
-  try
-    if FCallbackSlot >= 0 then ResetLicenseCallback;
-  except end;
-  DeleteCriticalSection(FLFCallbackMutex);
-  inherited Destroy;
-end;
-
-function Thin_HasLicense(handle: LongWord): HRESULT; cdecl;
-  external LexFloatClient_DLL name 'HasLicense';
-
-function TLFHandleImplementation.GetHasLicense: Boolean;
-begin
-  Result := ELFError.CheckOKFail(Thin_HasLicense(FHandle));
-end;
-
-function Thin_GetLicenseMetadata(handle: LongWord; const key: PWideChar; out value; length: LongWord): HRESULT; cdecl;
-  external LexFloatClient_DLL name 'GetLicenseMetadata';
-
-function TLFHandleImplementation.GetLicenseMetadata(const Key: UnicodeString): UnicodeString;
-var
-  Arg1: PWideChar;
-  ErrorCode: HRESULT;
-  function Try256(var OuterResult: UnicodeString): Boolean;
-  var
-    Buffer: array[0 .. 255] of WideChar;
-  begin
-    ErrorCode := Thin_GetLicenseMetadata(FHandle, Arg1, Buffer, Length(Buffer));
-    Result := ErrorCode <> LF_E_BUFFER_SIZE;
-    if ErrorCode = LF_OK then OuterResult := Buffer;
-  end;
-  function TryHigh(var OuterResult: UnicodeString): Boolean;
-  var
-    Buffer: UnicodeString;
-    Size: Integer;
-  begin
-    Size := 512;
-    repeat
-      Size := Size * 2;
-      SetLength(Buffer, 0);
-      SetLength(Buffer, Size);
-      ErrorCode := Thin_GetLicenseMetadata(FHandle, Arg1, PWideChar(Buffer)^, Size);
-      Result := ErrorCode <> LF_E_BUFFER_SIZE;
-    until Result or (Size >= 128 * 1024);
-    if ErrorCode = LF_OK then OuterResult := PWideChar(Buffer);
-  end;
-begin
-  Arg1 := PWideChar(Key);
-  if not Try256(Result) then TryHigh(Result);
-  if not ELFError.CheckOKFail(ErrorCode) then
-    raise ELFFailException.CreateFmt('Failed to get the value of the ' +
-      'license metadata field %s associated with the float server key', [Key]);
-end;
-
-function Thin_FindHandle(const productId: PWideChar; out handle: LongWord): HRESULT; cdecl;
-  external LexFloatClient_DLL name 'FindHandle';
-
-function LFFindHandle(const ProductId: UnicodeString): LongWord;
-begin
-  if not ELFError.CheckOKFail(Thin_FindHandle(PWideChar(ProductId), Result)) then
-    raise ELFFailException.Create('Failed to get the handle set for the product id');
-end;
-
-function Thin_GlobalCleanUp: HRESULT; cdecl;
-  external LexFloatClient_DLL name 'GlobalCleanUp';
-
-procedure GlobalCleanUp;
-begin
-  if not ELFError.CheckOKFail(Thin_GlobalCleanUp) then
-    raise ELFFailException.Create('Failed to release the resources acquired ' +
-      'for sending network requests');
-end;
 
 class function ELFError.CreateByCode(ErrorCode: HRESULT): ELFError;
 begin
