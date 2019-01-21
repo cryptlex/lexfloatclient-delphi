@@ -43,7 +43,6 @@ begin
 end;
 
 procedure Main;
-// Early Delphi versions missed finalization for global variables
 var
   Step: string;
 begin
