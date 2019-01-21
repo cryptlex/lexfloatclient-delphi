@@ -25,53 +25,57 @@ begin
 end;
 
 const
-  ProductId: UnicodeString = 'PASTE_PRODUCT_ID';
-  LexFloatServerHost: UnicodeString = 'localhost';
+  HostProductId: UnicodeString = 'PASTE_PRODUCT_ID';
+  HostUrl: UnicodeString = 'http://localhost:8090';
 
-procedure OnLexFloatClient(const Sender: ILFHandle;
-  const Error: Exception; Event: TLFCallbackEvent);
+procedure OnLexFloatClient(const Error: Exception);
 begin
   // No synchronization, write everything to console
   WriteLn;
   if Assigned(Error) then
   begin
-    WriteLn('Asynchronous exception from ', LFCallbackEventToString(Event), ': ',
+    WriteLn('Asynchronous exception: ',
       ScopedClassName(Error.ClassType));
     WriteLn(Error.Message);
   end else begin
-    WriteLn('Asynchronous success from ', LFCallbackEventToString(Event));
+    WriteLn('Asynchronous success');
   end;
 end;
 
 procedure Main;
 // Early Delphi versions missed finalization for global variables
 var
-  Handle: ILFHandle;
   Step: string;
 begin
   try
-    Step := 'LFGetHandle';
-    Handle := LFGetHandle(ProductId);
-    Step := 'SetFloatServer'; Handle.SetFloatServer(LexFloatServerHost, 8090);
-    Step := 'SetLicenseCallback';
+    Step := 'SetHostProductId';
+    SetHostProductId(HostProductId);
+    Step := 'SetHostUrl'; SetHostUrl(HostUrl);
+    Step := 'SetFloatingLicenseCallback';
     // console application has no message loop, thus Synchronized is False
-    Handle.SetLicenseCallback(OnLexFloatClient, False);
-    Step := 'RequestLicense'; Handle.RequestLicense; WriteLn;
-	  Write('Success! License Acquired. Press Enter to continue...'); ReadLn;
+    SetFloatingLicenseCallback(OnLexFloatClient, False);
     try
-      WriteLn;
-      WriteLn('Metadata: ', Handle.LicenseMetadata['key1']);
-    except
-      on E: Exception do
-      begin
+      Step := 'RequestFloatingLicense'; RequestFloatingLicense; WriteLn;
+	    Write('Success! License Acquired. Press Enter to continue...'); ReadLn;
+      try
         WriteLn;
-        WriteLn('Exception from GetLicenseMetadata key1: ', ScopedClassName(E.ClassType));
-        WriteLn(E.Message);
+        WriteLn('Metadata: ', GetHostLicenseMetadata('key1'));
+      except
+        on E: Exception do
+        begin
+          WriteLn;
+          WriteLn('Exception from GetHostLicenseMetadata key1: ', ScopedClassName(E.ClassType));
+          WriteLn(E.Message);
+        end;
       end;
+      Write('Press Enter to drop the license...'); ReadLn;
+      Step := 'DropFloatingLicense'; DropFloatingLicense;
+      WriteLn;
+      WriteLn('Success! License dropped.');
+      Step := 'ResetFloatingLicenseCallback';
+    finally
+      ResetFloatingLicenseCallback;
     end;
-    Write('Press Enter to drop the license...'); ReadLn;
-    Handle := nil; WriteLn; // drop license
-    WriteLn('Success! License dropped.');
     Write('Press Enter to continue...'); ReadLn;
   except
     on E: Exception do
