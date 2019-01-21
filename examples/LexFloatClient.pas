@@ -35,25 +35,17 @@ interface
 uses
   LexFloatClient.DelphiFeatures,
 {$IFDEF DELPHI_UNITS_SCOPED}
-  System.SysUtils, Winapi.Windows
+  System.SysUtils
 {$ELSE}
-  SysUtils, Windows
+  SysUtils
 {$ENDIF}
   ;
 
 type
-  TLFCallbackEvent = (leRefreshLicense, leDropLicense);
-
-function LFCallbackEventToString(Item: TLFCallbackEvent): string;
-
-type
-  TLFProcedureCallback = procedure(const Error: Exception;
-    Event: TLFCallbackEvent);
-  TLFMethodCallback = procedure(const Error: Exception;
-    Event: TLFCallbackEvent) of object;
+  TLFProcedureCallback = procedure(const Error: Exception);
+  TLFMethodCallback = procedure(const Error: Exception) of object;
   {$IFDEF DELPHI_HAS_CLOSURES}
-  TLFClosureCallback = reference to procedure(const Error: Exception;
-    Event: TLFCallbackEvent);
+  TLFClosureCallback = reference to procedure(const Error: Exception);
   {$ENDIF}
 
 (*
@@ -516,26 +508,14 @@ implementation
 
 uses
 {$IFDEF DELPHI_UNITS_SCOPED}
-  System.TypInfo, System.Classes
+  System.TypInfo, System.DateUtils, System.Classes, Winapi.Windows
 {$ELSE}
-  TypInfo, Classes
+  TypInfo, DateUtils, Classes, Windows
 {$ENDIF}
   ;
 
 const
   LexFloatClient_DLL = 'LexFloatClient.dll';
-
-function LFCallbackEventToString(Item: TLFCallbackEvent): string;
-begin
-  if (Item >= Low(TLFCallbackEvent)) and (Item <= High(TLFCallbackEvent)) then
-  begin
-    // sane value
-    Result := GetEnumName(TypeInfo(TLFCallbackEvent), Integer(Item));
-  end else begin
-    // invalid value, should not appear
-    Result := '$' + IntToHex(Integer(Item), 2 * SizeOf(Item));
-  end;
-end;
 
 (*** Return Codes ***)
 
@@ -571,6 +551,9 @@ function Thin_SetHostProductId(const productId: PWideChar): HRESULT; cdecl;
 
 procedure SetHostProductId(const ProductId: UnicodeString);
 begin
+  if not ELFError.CheckOKFail(Thin_SetHostProductId(PWideChar(ProductId))) then
+    raise ELFFailException.Create
+      ('Failed to set the product id of application');
 end;
 
 function Thin_SetHostUrl(const hostUrl: PWideChar): HRESULT; cdecl;
@@ -578,36 +561,210 @@ function Thin_SetHostUrl(const hostUrl: PWideChar): HRESULT; cdecl;
 
 procedure SetHostUrl(const HostUrl: UnicodeString);
 begin
+  if not ELFError.CheckOKFail(Thin_SetHostUrl(PWideChar(HostUrl))) then
+    raise ELFFailException.Create
+      ('Failed to set the network address of the LexFloatServer');
 end;
 
 type
   TLFThin_CallbackType = procedure (StatusCode: LongWord); cdecl;
 
-  TLFCallbackKind =
+function Thin_SetFloatingLicenseCallback(callback: TLFThin_CallbackType): HRESULT; cdecl;
+  external LexFloatClient_DLL name 'SetFloatingLicenseCallback';
+
+type
+  TLFFloatingLicenseCallbackKind =
     (lckNone,
      lckProcedure,
      lckMethod
      {$IFDEF DELPHI_HAS_CLOSURES}, lckClosure{$ENDIF});
 
-function Thin_SetFloatingLicenseCallback(callback: TLFThin_CallbackType): HRESULT; cdecl;
-  external LexFloatClient_DLL name 'SetFloatingLicenseCallback';
+var
+  LFFloatingLicenseCallbackKind: TLFFloatingLicenseCallbackKind = lckNone;
+  LFProcedureCallback: TLFProcedureCallback;
+  LFMethodCallback: TLFMethodCallback;
+  {$IFDEF DELPHI_HAS_CLOSURES}
+  LFClosureCallback: TLFClosureCallback;
+  {$ENDIF}
+  LFFloatingLicenseCallbackSynchronized: Boolean;
+  LFStatusCode: HRESULT;
+  LFFloatingLicenseCallbackMutex: TRTLCriticalSection;
+
+type
+  TLFThin_CallbackProxyClass = class
+  public
+    class procedure Invoke;
+  end;
+
+class procedure TLFThin_CallbackProxyClass.Invoke;
+  procedure DoInvoke(const Error: Exception);
+  begin
+    case LFFloatingLicenseCallbackKind of
+      lckNone: Exit;
+      lckProcedure:
+        if Assigned(LFProcedureCallback) then
+          LFProcedureCallback(Error);
+      lckMethod:
+        if Assigned(LFMethodCallback) then
+          LFMethodCallback(Error);
+      {$IFDEF DELPHI_HAS_CLOSURES}
+      lckClosure:
+        if Assigned(LFClosureCallback) then
+          LFClosureCallback(Error);
+      {$ENDIF}
+    else
+      // there should be default logging here like NSLog, but there is none in Delphi
+    end;
+  end;
+
+var
+  FailError: Exception;
+
+begin
+  try
+    EnterCriticalSection(LFFloatingLicenseCallbackMutex);
+    try
+      case LFFloatingLicenseCallbackKind of
+        lckNone: Exit;
+        lckProcedure: if not Assigned(LFProcedureCallback) then Exit;
+        lckMethod: if not Assigned(LFMethodCallback) then Exit;
+        {$IFDEF DELPHI_HAS_CLOSURES}
+        lckClosure: if not Assigned(LFClosureCallback) then Exit;
+        {$ENDIF}
+      else
+        // there should be default logging here like NSLog, but there is none in Delphi
+      end;
+
+      FailError := nil;
+      try
+        FailError := ELFError.CreateByCode(LFStatusCode);
+        DoInvoke(FailError);
+      finally
+        FreeAndNil(FailError);
+      end;
+    finally
+      // This recursive mutex prevents the following scenario:
+      //
+      // (Main thread)    SetFloatingLicenseCallback
+      // (Tangent thread) LFThin_CallbackProxy going to invoke X.OnLexFloatClient
+      // (Main thread)    ResetFloatingLicenseCallback
+      // (Main thread)    X.Free
+      //
+      // Main thread is not allowed to proceed to X.Free until callback is finished
+      // On the other hand, if callback removes itself, recursive mutex will allow that
+      LeaveCriticalSection(LFFloatingLicenseCallbackMutex);
+    end;
+  except
+    // there should be default logging here like NSLog, but there is none in Delphi
+  end;
+end;
+
+procedure LFThin_CallbackProxy(StatusCode: LongWord); cdecl;
+begin
+  try
+    EnterCriticalSection(LFFloatingLicenseCallbackMutex);
+    try
+      case LFFloatingLicenseCallbackKind of
+        lckNone: Exit;
+        lckProcedure: if not Assigned(LFProcedureCallback) then Exit;
+        lckMethod: if not Assigned(LFMethodCallback) then Exit;
+        {$IFDEF DELPHI_HAS_CLOSURES}
+        lckClosure: if not Assigned(LFClosureCallback) then Exit;
+        {$ENDIF}
+      else
+        // there should be default logging here like NSLog, but there is none in Delphi
+      end;
+
+      LFStatusCode := HRESULT(StatusCode);
+      if not LFFloatingLicenseCallbackSynchronized then
+      begin
+        TLFThin_CallbackProxyClass.Invoke;
+        Exit;
+      end;
+    finally
+      LeaveCriticalSection(LFFloatingLicenseCallbackMutex);
+    end;
+
+    // Race condition here
+    //
+    // Invoke should probably run exactly the same (captured) handler,
+    // but instead it reenters mutex, and handler can be different at
+    // that moment. For most sane use cases behavior should be sound
+    // anyway.
+
+    TThread.Synchronize(nil, TLFThin_CallbackProxyClass.Invoke);
+  except
+    // there should be default logging here like NSLog, but there is none in Delphi
+  end;
+end;
 
 procedure SetFloatingLicenseCallback(Callback: TLFProcedureCallback; Synchronized: Boolean); overload;
 begin
+  EnterCriticalSection(LFFloatingLicenseCallbackMutex);
+  try
+    LFProcedureCallback := Callback;
+    LFFloatingLicenseCallbackSynchronized := Synchronized;
+    LFFloatingLicenseCallbackKind := lckProcedure;
+
+    if not ELFError.CheckOKFail(Thin_SetFloatingLicenseCallback(LFThin_CallbackProxy)) then
+      raise
+      ELFFailException.Create('Failed to set the renew license callback function');
+  finally
+    LeaveCriticalSection(LFFloatingLicenseCallbackMutex);
+  end;
 end;
 
 procedure SetFloatingLicenseCallback(Callback: TLFMethodCallback; Synchronized: Boolean); overload;
 begin
+  EnterCriticalSection(LFFloatingLicenseCallbackMutex);
+  try
+    LFMethodCallback := Callback;
+    LFFloatingLicenseCallbackSynchronized := Synchronized;
+    LFFloatingLicenseCallbackKind := lckMethod;
+
+    if not ELFError.CheckOKFail(Thin_SetFloatingLicenseCallback(LFThin_CallbackProxy)) then
+      raise
+      ELFFailException.Create('Failed to set the renew license callback function');
+  finally
+    LeaveCriticalSection(LFFloatingLicenseCallbackMutex);
+  end;
 end;
 
 {$IFDEF DELPHI_HAS_CLOSURES}
 procedure SetFloatingLicenseCallback(Callback: TLFClosureCallback; Synchronized: Boolean); overload;
 begin
+  EnterCriticalSection(LFFloatingLicenseCallbackMutex);
+  try
+    LFClosureCallback := Callback;
+    LFFloatingLicenseCallbackSynchronized := Synchronized;
+    LFFloatingLicenseCallbackKind := lckClosure;
+
+    if not ELFError.CheckOKFail(Thin_SetFloatingLicenseCallback(LFThin_CallbackProxy)) then
+      raise
+      ELFFailException.Create('Failed to set the renew license callback function');
+  finally
+    LeaveCriticalSection(LFFloatingLicenseCallbackMutex);
+  end;
 end;
 {$ENDIF}
 
+procedure LFThin_CallbackDummy(StatusCode: LongWord); cdecl;
+begin
+  ;
+end;
+
 procedure ResetFloatingLicenseCallback;
 begin
+  EnterCriticalSection(LFFloatingLicenseCallbackMutex);
+  try
+    LFFloatingLicenseCallbackKind := lckNone;
+
+    if not ELFError.CheckOKFail(Thin_SetFloatingLicenseCallback(LFThin_CallbackDummy)) then
+      raise
+      ELFFailException.Create('Failed to reset the renew license callback function');
+  finally
+    LeaveCriticalSection(LFFloatingLicenseCallbackMutex);
+  end;
 end;
 
 function Thin_SetFloatingClientMetadata(const key, value: PWideChar): HRESULT; cdecl;
@@ -615,20 +772,59 @@ function Thin_SetFloatingClientMetadata(const key, value: PWideChar): HRESULT; c
 
 procedure SetFloatingClientMetadata(const Key, Value: UnicodeString);
 begin
+  if not ELFError.CheckOKFail(Thin_SetFloatingClientMetadata(PWideChar(Key), PWideChar(Value))) then
+    raise ELFFailException.Create
+      ('Failed to set the floating client metadata');
 end;
 
 function Thin_GetHostLicenseMetadata(const key: PWideChar; out value; length: LongWord): HRESULT; cdecl;
   external LexFloatClient_DLL name 'GetHostLicenseMetadata';
 
 function GetHostLicenseMetadata(const Key: UnicodeString): UnicodeString;
+var
+  Arg1: PWideChar;
+  ErrorCode: HRESULT;
+  function Try256(var OuterResult: UnicodeString): Boolean;
+  var
+    Buffer: array[0 .. 255] of WideChar;
+  begin
+    ErrorCode := Thin_GetHostLicenseMetadata(Arg1, Buffer, Length(Buffer));
+    Result := ErrorCode <> LF_E_BUFFER_SIZE;
+    if ErrorCode = LF_OK then OuterResult := Buffer;
+  end;
+  function TryHigh(var OuterResult: UnicodeString): Boolean;
+  var
+    Buffer: UnicodeString;
+    Size: Integer;
+  begin
+    Size := 512;
+    repeat
+      Size := Size * 2;
+      SetLength(Buffer, 0);
+      SetLength(Buffer, Size);
+      ErrorCode := Thin_GetHostLicenseMetadata(Arg1, PWideChar(Buffer)^, Size);
+      Result := ErrorCode <> LF_E_BUFFER_SIZE;
+    until Result or (Size >= 128 * 1024);
+    if ErrorCode = LF_OK then OuterResult := PWideChar(Buffer);
+  end;
 begin
+  Arg1 := PWideChar(Key);
+  if not Try256(Result) then TryHigh(Result);
+  if not ELFError.CheckOKFail(ErrorCode) then
+    raise ELFFailException.CreateFmt('Failed to get the value of the license metadata field %s associated with the LexFloatServer license', [Key]);
 end;
 
 function Thin_GetHostLicenseExpiryDate(out expiryDate: LongWord): HRESULT; cdecl;
   external LexFloatClient_DLL name 'GetHostLicenseExpiryDate';
 
 function GetHostLicenseExpiryDate: TDateTime;
+var
+  ExpiryDate: LongWord;
 begin
+  if not ELFError.CheckOKFail(Thin_GetHostLicenseExpiryDate(ExpiryDate)) then
+    raise
+    ELFFailException.Create('Failed to get the license expiry date timestamp of the LexFloatServer license');
+  Result := UnixToDateTime(ExpiryDate);
 end;
 
 function Thin_RequestFloatingLicense: HRESULT; cdecl;
@@ -636,6 +832,9 @@ function Thin_RequestFloatingLicense: HRESULT; cdecl;
 
 procedure RequestFloatingLicense;
 begin
+  if not ELFError.CheckOKFail(Thin_RequestFloatingLicense) then
+    raise
+    ELFFailException.Create('Failed to send the request to lease the license from the LexFloatServer');
 end;
 
 function Thin_DropFloatingLicense: HRESULT; cdecl;
@@ -643,13 +842,28 @@ function Thin_DropFloatingLicense: HRESULT; cdecl;
 
 procedure DropFloatingLicense;
 begin
+  if not ELFError.CheckOKFail(Thin_DropFloatingLicense) then
+    raise
+    ELFFailException.Create('Failed to sends the request to the LexFloatServer to free the license');
 end;
 
 function Thin_HasFloatingLicense: HRESULT; cdecl;
   external LexFloatClient_DLL name 'HasFloatingLicense';
 
 function HasFloatingLicense: Boolean;
+var
+  Status: HRESULT;
 begin
+  Status := Thin_HasFloatingLicense;
+  if Status = LF_E_NO_LICENSE then
+  begin
+    Result := False;
+    Exit;
+  end;
+  if not ELFError.CheckOKFail(Status) then
+    raise
+    ELFFailException.Create('Failed to check whether any license has been leased or not');
+  Result := True;
 end;
 
 class function ELFError.CreateByCode(ErrorCode: HRESULT): ELFError;
@@ -870,10 +1084,9 @@ begin
 end;
 
 initialization
-  InitializeCriticalSection(CallbackSlotsMutex);
-  FillChar(CallbackSlots, SizeOf(CallbackSlots), 0);
+  InitializeCriticalSection(LFFloatingLicenseCallbackMutex);
 finalization
-  try GlobalCleanup; except end;
-  DeleteCriticalSection(CallbackSlotsMutex);
+  try ResetFloatingLicenseCallback; except end;
+  DeleteCriticalSection(LFFloatingLicenseCallbackMutex);
 end.
 
