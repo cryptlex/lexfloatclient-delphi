@@ -183,14 +183,15 @@ procedure RequestFloatingLicense;
     PROCEDURE: DropFloatingLicense()
 
     PURPOSE: Sends the request to the LexFloatServer to free the license.
+    Does nothing if license is not aquired.
 
-    Call this function before you exit your application to prevent zombie licenses.
+    Call this procedure before you exit your application to prevent zombie licenses.
 
-    EXCEPTIONS: ELFProductIdException, ELFNoLicenseException,
-    ELFHostURLException, ELFCallbackException, ELFInetException,
-    ELFLicenseNotFoundException, ELFClientException, ELFIPException,
-    ELFServerException, ELFServerLicenseNotActivatedException,
-    ELFServerTimeModifiedException, ELFServerLicenseSuspendedException,
+    EXCEPTIONS: ELFProductIdException, ELFHostURLException,
+    ELFCallbackException, ELFInetException, ELFLicenseNotFoundException,
+    ELFClientException, ELFIPException, ELFServerException,
+    ELFServerLicenseNotActivatedException, ELFServerTimeModifiedException,
+    ELFServerLicenseSuspendedException,
     ELFServerLicenseGracePeriodOverException, ELFServerLicenseExpiredException
 *)
 
@@ -841,10 +842,15 @@ function Thin_DropFloatingLicense: HRESULT; cdecl;
   external LexFloatClient_DLL name 'DropFloatingLicense';
 
 procedure DropFloatingLicense;
+var
+  Status: HRESULT;
 begin
-  if not ELFError.CheckOKFail(Thin_DropFloatingLicense) then
+  if not HasFloatingLicense then Exit;
+  Status := Thin_DropFloatingLicense;
+  if Status = LF_E_NO_LICENSE then Exit;
+  if not ELFError.CheckOKFail(Status) then
     raise
-    ELFFailException.Create('Failed to sends the request to the LexFloatServer to free the license');
+    ELFFailException.Create('Failed to send the request to the LexFloatServer to free the license');
 end;
 
 function Thin_HasFloatingLicense: HRESULT; cdecl;
