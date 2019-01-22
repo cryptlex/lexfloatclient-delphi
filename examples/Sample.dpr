@@ -28,7 +28,7 @@ const
   HostProductId: UnicodeString = 'PASTE_PRODUCT_ID';
   HostUrl: UnicodeString = 'http://localhost:8090';
 
-procedure OnLexFloatClient(const Error: Exception);
+procedure LicenseRenewCallback(const Error: Exception);
 begin
   // No synchronization, write everything to console
   WriteLn;
@@ -52,7 +52,7 @@ begin
     Step := 'SetHostUrl'; SetHostUrl(HostUrl);
     Step := 'SetFloatingLicenseCallback';
     // console application has no message loop, thus Synchronized is False
-    SetFloatingLicenseCallback(OnLexFloatClient, False);
+    SetFloatingLicenseCallback(LicenseRenewCallback, False);
     try
       Step := 'RequestFloatingLicense'; RequestFloatingLicense; WriteLn;
 	    Write('Success! License Acquired. Press Enter to continue...'); ReadLn;
