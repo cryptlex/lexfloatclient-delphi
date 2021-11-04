@@ -152,6 +152,25 @@ procedure SetFloatingClientMetadata(const Key, Value: UnicodeString);
 function GetHostLicenseMetadata(const Key: UnicodeString): UnicodeString;
 
 (*
+    PROCEDURE: GetHostLicenseMeterAttribute()
+
+    PURPOSE: Gets the license meter attribute allowed uses and total uses
+    associated with the LexFloatServer license.
+
+    PARAMETERS:
+    * Name - name of the meter attribute
+    * AllowedUses - allowed uses
+    * TotalUses - total uses
+    * GrossUses - gross uses
+
+    EXCEPTIONS: ELFProductIdException, ELFNoLicenseException,
+    ELFMeterAttributeNotFoundException
+*)
+
+procedure GetHostLicenseMeterAttribute(const Name: UnicodeString;
+  out AllowedUses, TotalUses, GrossUses: Cardinal);
+
+(*
     FUNCTION: GetHostLicenseExpiryDate()
 
     PURPOSE: Gets the license expiry date timestamp of the LexFloatServer license.
@@ -162,6 +181,22 @@ function GetHostLicenseMetadata(const Key: UnicodeString): UnicodeString;
 *)
 
 function GetHostLicenseExpiryDate: TDateTime;
+
+(*
+    FUNCTION: GetFloatingClientMeterAttributeUses()
+
+    PURPOSE: Gets the meter attribute uses consumed by the floating client.
+
+    PARAMETERS:
+    * Name - name of the meter attribute
+
+    RESULT: Meter attribute uses consumed by the floating client
+
+    EXCEPTIONS: ELFProductIdException, ELFNoLicenseException,
+    ELFMeterAttributeNotFoundException
+*)
+
+function GetFloatingClientMeterAttributeUses(const Name: UnicodeString): Cardinal;
 
 (*
     PROCEDURE: RequestFloatingLicense()
@@ -205,10 +240,70 @@ procedure DropFloatingLicense;
 
     RESULT: Boolean value
 
-    EXCEPTIONS: LF_E_PRODUCT_ID
+    EXCEPTIONS: ELFProductIdException
 *)
 
 function HasFloatingLicense: Boolean;
+
+(*
+    PROCEDURE: IncrementFloatingClientMeterAttributeUses()
+
+    PURPOSE: Increments the meter attribute uses of the floating client.
+
+    PARAMETERS:
+    * Name - name of the meter attribute
+    * Increment - the increment value
+
+    EXCEPTIONS: ELFProductIdException, ELFNoLicenseException,
+    ELFHostURLException, ELFMeterAttributeNotFoundException, ELFInetException,
+    ELFLicenseNotFoundException, ELFClientException, ELFIPException,
+    ELFServerException, ELFMeterAttributeUsesLimitReachedException,
+    ELFServerLicenseNotActivatedException, ELFServerTimeModifiedException,
+    ELFServerLicenseSuspendedException,
+    ELFServerLicenseGracePeriodOverException, ELFServerLicenseExpiredException
+
+*)
+
+procedure IncrementFloatingClientMeterAttributeUses(const Name: UnicodeString; Increment: Cardinal);
+
+(*
+    PROCEDURE: DecrementFloatingClientMeterAttributeUses()
+
+    PURPOSE: Decrements the meter attribute uses of the floating client.
+
+    PARAMETERS:
+    * Name - name of the meter attribute
+    * Decrement - the decrement value
+
+    EXCEPTIONS: ELFProductIdException, ELFNoLicenseException,
+    ELFHostURLException, ELFMeterAttributeNotFoundException, ELFInetException,
+    ELFLicenseNotFoundException, ELFClientException, ELFIPException,
+    ELFServerException, ELFServerLicenseNotActivatedException,
+    ELFServerTimeModifiedException, ELFServerLicenseSuspendedException,
+    ELFServerLicenseGracePeriodOverException, ELFServerLicenseExpiredException
+
+    NOTE: If the decrement is more than the current uses, it resets the uses to 0.
+*)
+
+procedure DecrementFloatingClientMeterAttributeUses(const Name: UnicodeString; Decrement: Cardinal);
+
+(*
+    PROCEDURE: ResetFloatingClientMeterAttributeUses()
+
+    PURPOSE: Resets the meter attribute uses consumed by the floating client.
+
+    PARAMETERS:
+    * Name - name of the meter attribute
+
+    EXCEPTIONS: ELFProductIdException, ELFNoLicenseException,
+    ELFHostURLException, ELFMeterAttributeNotFoundException, ELFInetException,
+    ELFLicenseNotFoundException, ELFClientException, ELFIPException,
+    ELFServerException, ELFServerLicenseNotActivatedException,
+    ELFServerTimeModifiedException, ELFServerLicenseSuspendedException,
+    ELFServerLicenseGracePeriodOverException, ELFServerLicenseExpiredException
+*)
+
+procedure ResetFloatingClientMeterAttributeUses(const Name: UnicodeString);
 
 (*** Exceptions ***)
 
@@ -417,6 +512,28 @@ type
   end;
 
     (*
+        CODE: LF_E_METER_ATTRIBUTE_NOT_FOUND
+
+        MESSAGE: The meter attribute does not exist.
+    *)
+
+  ELFMeterAttributeNotFoundException = class(ELFException)
+  public
+    constructor Create;
+  end;
+
+    (*
+        CODE: LF_E_METER_ATTRIBUTE_USES_LIMIT_REACHED
+
+        MESSAGE: The meter attribute has reached it's usage limit.
+    *)
+
+  ELFMeterAttributeUsesLimitReachedException = class(ELFException)
+  public
+    constructor Create;
+  end;
+
+    (*
         CODE: LF_E_IP
 
         MESSAGE: IP address is not allowed.
@@ -538,6 +655,8 @@ const
   LF_E_METADATA_KEY_LENGTH = HRESULT(52);
   LF_E_METADATA_VALUE_LENGTH = HRESULT(53);
   LF_E_FLOATING_CLIENT_METADATA_LIMIT = HRESULT(54);
+  LF_E_METER_ATTRIBUTE_NOT_FOUND = HRESULT(55);
+  LF_E_METER_ATTRIBUTE_USES_LIMIT_REACHED = HRESULT(56);
   LF_E_IP = HRESULT(60);
   LF_E_CLIENT = HRESULT(70);
   LF_E_SERVER = HRESULT(71);
@@ -815,6 +934,18 @@ begin
     raise ELFFailException.CreateFmt('Failed to get the value of the license metadata field %s associated with the LexFloatServer license', [Key]);
 end;
 
+function Thin_GetHostLicenseMeterAttribute(const name: PWideChar; out allowedUses, totalUses, grossUses: Cardinal): HRESULT; cdecl;
+  external LexFloatClient_DLL name 'GetHostLicenseMeterAttribute';
+
+procedure GetHostLicenseMeterAttribute(const Name: UnicodeString;
+  out AllowedUses, TotalUses, GrossUses: Cardinal);
+begin
+  if not ELFError.CheckOKFail(Thin_GetHostLicenseMeterAttribute
+      (PWideChar(Name), AllowedUses, TotalUses, GrossUses)) then
+    raise
+    ELFFailException.CreateFmt('Failed to get the license meter attribute %s uses associated with the LexFloatServer license', [Name]);
+end;
+
 function Thin_GetHostLicenseExpiryDate(out expiryDate: LongWord): HRESULT; cdecl;
   external LexFloatClient_DLL name 'GetHostLicenseExpiryDate';
 
@@ -826,6 +957,17 @@ begin
     raise
     ELFFailException.Create('Failed to get the license expiry date timestamp of the LexFloatServer license');
   Result := UnixToDateTime(ExpiryDate);
+end;
+
+function Thin_GetFloatingClientMeterAttributeUses(const name: PWideChar; out auses: Cardinal): HRESULT; cdecl;
+  external LexFloatClient_DLL name 'GetFloatingClientMeterAttributeUses';
+
+function GetFloatingClientMeterAttributeUses(const Name: UnicodeString): Cardinal;
+begin
+  if not ELFError.CheckOKFail(Thin_GetFloatingClientMeterAttributeUses
+      (PWideChar(Name), Result)) then
+    raise
+    ELFFailException.CreateFmt('Failed to get the meter attribute %s uses consumed by the floating client', [Name]);
 end;
 
 function Thin_RequestFloatingLicense: HRESULT; cdecl;
@@ -872,6 +1014,39 @@ begin
   Result := True;
 end;
 
+function Thin_IncrementFloatingClientMeterAttributeUses(const name: PWideChar; increment: Cardinal): HRESULT; cdecl;
+  external LexFloatClient_DLL name 'IncrementFloatingClientMeterAttributeUses';
+
+procedure IncrementFloatingClientMeterAttributeUses(const Name: UnicodeString; Increment: Cardinal);
+begin
+  if not ELFError.CheckOKFail(Thin_IncrementFloatingClientMeterAttributeUses
+      (PWideChar(Name), Increment)) then
+    raise
+    ELFFailException.CreateFmt('Failed to increment the meter attribute %s uses of the floating client', [Name]);
+end;
+
+function Thin_DecrementFloatingClientMeterAttributeUses(const name: PWideChar; decrement: Cardinal): HRESULT; cdecl;
+  external LexFloatClient_DLL name 'DecrementFloatingClientMeterAttributeUses';
+
+procedure DecrementFloatingClientMeterAttributeUses(const Name: UnicodeString; Decrement: Cardinal);
+begin
+  if not ELFError.CheckOKFail(Thin_DecrementFloatingClientMeterAttributeUses
+      (PWideChar(Name), Decrement)) then
+    raise
+    ELFFailException.CreateFmt('Failed to decrement the meter attribute %s uses of the floating client', [Name]);
+end;
+
+function Thin_ResetFloatingClientMeterAttributeUses(const name: PWideChar): HRESULT; cdecl;
+  external LexFloatClient_DLL name 'ResetFloatingClientMeterAttributeUses';
+
+procedure ResetFloatingClientMeterAttributeUses(const Name: UnicodeString);
+begin
+  if not ELFError.CheckOKFail(Thin_ResetFloatingClientMeterAttributeUses
+      (PWideChar(Name))) then
+    raise
+    ELFFailException.CreateFmt('Failed to reset the meter attribute %s uses of the floating client', [Name]);
+end;
+
 class function ELFError.CreateByCode(ErrorCode: HRESULT): ELFError;
 begin
   case ErrorCode of
@@ -892,6 +1067,8 @@ begin
     LF_E_METADATA_KEY_LENGTH: Result := ELFMetadataKeyLengthException.Create;
     LF_E_METADATA_VALUE_LENGTH: Result := ELFMetadataValueLengthException.Create;
     LF_E_FLOATING_CLIENT_METADATA_LIMIT: Result := ELFFloatingClientMetadataLimitException.Create;
+    LF_E_METER_ATTRIBUTE_NOT_FOUND: Result := ELFMeterAttributeNotFoundException.Create;
+    LF_E_METER_ATTRIBUTE_USES_LIMIT_REACHED: Result := ELFMeterAttributeUsesLimitReachedException.Create;
     LF_E_IP: Result := ELFIPException.Create;
     LF_E_CLIENT: Result := ELFClientException.Create;
     LF_E_SERVER: Result := ELFServerException.Create;
@@ -1038,6 +1215,18 @@ constructor ELFFloatingClientMetadataLimitException.Create;
 begin
   inherited Create('The floating client has reached it''s metadata fields limit');
   FErrorCode := LF_E_FLOATING_CLIENT_METADATA_LIMIT;
+end;
+
+constructor ELFMeterAttributeNotFoundException.Create;
+begin
+  inherited Create('The meter attribute does not exist');
+  FErrorCode := LF_E_METER_ATTRIBUTE_NOT_FOUND;
+end;
+
+constructor ELFMeterAttributeUsesLimitReachedException.Create;
+begin
+  inherited Create('The meter attribute has reached it''s usage limit');
+  FErrorCode := LF_E_METER_ATTRIBUTE_USES_LIMIT_REACHED;
 end;
 
 constructor ELFIPException.Create;
